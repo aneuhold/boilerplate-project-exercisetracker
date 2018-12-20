@@ -1,9 +1,10 @@
+/* eslint-disable prefer-promise-reject-errors */
 const express = require('express');
 const bodyParser = require('body-parser');
 const mongoose = require('mongoose');
+require('dotenv').load();
 
 const app = express();
-
 
 mongoose.connect(process.env.MLAB_URI || 'mongodb://localhost/exercise-track');
 
@@ -15,28 +16,61 @@ app.get('/', (req, res) => {
   res.sendFile(`${__dirname}/views/index.html`);
 });
 
+/**
+* The schema for users in the MongoDB
+* */
+const userSchema = new mongoose.Schema({ name: String });
 
-// Not found middleware
-app.use((req, res, next) => next({ status: 404, message: 'not found' }));
+/**
+* The model for all users in the MongoDB
+* */
+const User = mongoose.model('User', userSchema);
 
-// Error Handling middleware
-app.use((err, req, res) => {
-  let errCode; let
-    errMessage;
+/**
+* Checks if the given user exists and returns a promise with the true or false result
+* If the check was successful, it will resolve with true or false.
+* If the check threw an error, it will reject with the error
+* */
+function userDoesNotExist(userName) {
+  return new Promise((resolve, reject) => {
+    User.findOne({ name: userName }).then((doc, err) => {
+      if (err) {
+        reject(err);
+      } else if (doc == null) {
+        resolve();
+      } else {
+        reject('Username already exists');
+      }
+    });
+  });
+}
 
-  if (err.errors) {
-    // mongoose validation error
-    errCode = 400; // bad request
-    const keys = Object.keys(err.errors);
-    // report the first validation error
-    errMessage = err.errors[keys[0]].message;
-  } else {
-    // generic or custom error
-    errCode = err.status || 500;
-    errMessage = err.message || 'Internal Server Error';
-  }
-  res.status(errCode).type('txt')
-    .send(errMessage);
+/**
+* Creates a new user when posted to.
+* The form data should look like:
+* req.body.username
+* */
+app.post('/api/exercise/new-user', (req, res) => {
+  userDoesNotExist(req.body.username).then(() => {
+    const newUser = new User({
+      name: req.body.username,
+    });
+    newUser.save();
+    return newUser;
+  }).then((newUser) => {
+    res.json(newUser);
+  }).catch((error) => {
+    res.send(error);
+  });
+});
+
+/**
+* Lists all of the users in the MongoDB as an array
+* */
+app.get('/api/exercise/users', (req, res) => {
+  User.find().then((result) => {
+    res.json(result);
+  });
 });
 
 const listener = app.listen(process.env.PORT || 3000, () => {
