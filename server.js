@@ -1,4 +1,6 @@
+/* eslint-disable no-underscore-dangle */
 /* eslint-disable prefer-promise-reject-errors */
+/* eslint-disable consistent-return */
 const express = require('express');
 const bodyParser = require('body-parser');
 const mongoose = require('mongoose');
@@ -119,14 +121,46 @@ app.get('/api/exercise/users', (req, res) => {
 app.post('/api/exercise/add', (req, res) => {
   User.findOne({ _id: req.body.userId }).then((selectedUser) => {
     if (selectedUser != null) {
-      res.send(`The user was found ${selectedUser}`);
+      return selectedUser;
+    // eslint-disable-next-line no-else-return
     } else {
       res.send(`The user with the id of ${req.body.userId} was not found`);
     }
-  }).catch((err) => {
-    res.send(err);
-  });
+  }).then((selectedUser) => {
+    let newDate = null;
+    try {
+      newDate = new Date(req.body.date);
+    } catch (error) {
+      newDate = new Date();
+    }
+    return [selectedUser, newDate];
+  }).then((returnArray) => {
+    const [selectedUser, newDate] = returnArray;
+    const newLog = new ExerciseLog({
+      _id: selectedUser._id,
+      username: selectedUser.name,
+      description: req.body.description,
+      duration: req.body.duration,
+      date: newDate,
+    }, (err) => {
+      if (err) {
+        console.log(err);
+      }
+    });
+    newLog.save();
+    res.json(newLog);
+  })
+    .catch((err) => {
+      res.send(err);
+    });
 });
+
+// The post request occurs
+// the user is found and if the user does not exist, it returns that error, if the user
+// is found, then the user is passed on to the next function
+// At that point the date is processed, after the date is processed the date is passed on
+// with the user
+// The new log is created and returned
 
 const listener = app.listen(process.env.PORT || 3000, () => {
   console.log(`Your app is listening on port ${listener.address().port}`);
