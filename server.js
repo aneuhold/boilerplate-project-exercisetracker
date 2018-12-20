@@ -2,6 +2,7 @@
 const express = require('express');
 const bodyParser = require('body-parser');
 const mongoose = require('mongoose');
+const shortid = require('shortid');
 require('dotenv').load();
 
 const app = express();
@@ -19,7 +20,41 @@ app.get('/', (req, res) => {
 /**
 * The schema for users in the MongoDB
 * */
-const userSchema = new mongoose.Schema({ name: String });
+const userSchema = new mongoose.Schema({
+  name: String,
+  _id: {
+    type: String,
+    default: shortid.generate(),
+  },
+});
+
+/**
+ * The schema for excercises in the MongoDB
+ */
+const exerciseLogSchema = new mongoose.Schema({
+  username: {
+    type: String,
+    required: true,
+  },
+  description: {
+    type: String,
+    required: true,
+  },
+  _id: {
+    type: String,
+    required: true,
+  },
+  duration: {
+    type: Number,
+    required: true,
+  },
+  date: Date,
+});
+
+/**
+ * The model for all exercise logs in the MongoDB
+ */
+const ExerciseLog = mongoose.model('ExerciseLog', exerciseLogSchema);
 
 /**
 * The model for all users in the MongoDB
@@ -70,6 +105,26 @@ app.post('/api/exercise/new-user', (req, res) => {
 app.get('/api/exercise/users', (req, res) => {
   User.find().then((result) => {
     res.json(result);
+  });
+});
+
+/**
+ * Adds an exercise to the user with the corresponding user ID.
+ * The form data should look like:
+ * req.body.userId
+ * req.body.description
+ * req.body.duration
+ * req.body.date
+ */
+app.post('/api/exercise/add', (req, res) => {
+  User.findOne({ _id: req.body.userId }).then((selectedUser) => {
+    if (selectedUser != null) {
+      res.send(`The user was found ${selectedUser}`);
+    } else {
+      res.send(`The user with the id of ${req.body.userId} was not found`);
+    }
+  }).catch((err) => {
+    res.send(err);
   });
 });
 
