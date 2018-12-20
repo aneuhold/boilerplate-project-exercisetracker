@@ -9,7 +9,9 @@ require('dotenv').load();
 
 const app = express();
 
-mongoose.connect(process.env.MLAB_URI || 'mongodb://localhost/exercise-track');
+mongoose.connect(process.env.MLAB_URI || 'mongodb://localhost/exercise-track', {
+  useMongoClient: true,
+});
 
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
@@ -17,6 +19,27 @@ app.use(bodyParser.json());
 app.use(express.static('public'));
 app.get('/', (req, res) => {
   res.sendFile(`${__dirname}/views/index.html`);
+});
+
+// Error Handling middleware
+// eslint-disable-next-line no-unused-vars
+app.use((err, req, res, next) => {
+  let errCode;
+  let errMessage;
+
+  if (err.errors) {
+    // mongoose validation error
+    errCode = 400; // bad request
+    const keys = Object.keys(err.errors);
+    // report the first validation error
+    errMessage = err.errors[keys[0]].message;
+  } else {
+    // generic or custom error
+    errCode = err.status || 500;
+    errMessage = err.message || 'Internal Server Error';
+  }
+  res.status(errCode).type('txt')
+    .send(errMessage);
 });
 
 /**
@@ -64,21 +87,53 @@ const ExerciseLog = mongoose.model('ExerciseLog', exerciseLogSchema);
 const User = mongoose.model('User', userSchema);
 
 /**
-* Checks if the given user exists and returns a promise with the true or false result
-* If the check was successful, it will resolve with true or false.
+* Checks if the given user exists and returns a promise which resolves to
+* true if the user does not exist and throws an error otherwise.
+* If the check was successful it w.
 * If the check threw an error, it will reject with the error
 * */
 function userDoesNotExist(userName) {
   return new Promise((resolve, reject) => {
-    User.findOne({ name: userName }).then((doc, err) => {
+    User.findOne({ name: userName }, (err, doc) => {
       if (err) {
-        reject(err);
+        reject(Error(err));
       } else if (doc == null) {
         resolve();
       } else {
-        reject('Username already exists');
+        console.log('The user already exists');
+        reject(Error('User already exists'));
       }
     });
+  });
+}
+
+function getUserById(id) {
+  return new Promise((resolve, reject) => {
+    User.findById(id, (err, doc) => {
+      if (err) {
+        reject(Error(err));
+      } else if (doc == null) {
+        reject(Error('User was not found'));
+      } else {
+        resolve(doc);
+      }
+    });
+  });
+}
+
+function validateDate(dateString) {
+  return new Promise((resolve, reject) => {
+    let newDate;
+    if (dateString === '') {
+      newDate = new Date();
+    } else {
+      newDate = new Date(dateString);
+    }
+    // eslint-disable-next-line eqeqeq
+    if (newDate == 'Invalid Date') {
+      reject(Error('Invalid date, leave the date blank to use the current date'));
+    }
+    resolve(newDate);
   });
 }
 
@@ -96,8 +151,8 @@ app.post('/api/exercise/new-user', (req, res) => {
     return newUser;
   }).then((newUser) => {
     res.json(newUser);
-  }).catch((error) => {
-    res.send(error);
+  }).catch((err) => {
+    res.send(err.message);
   });
 });
 
@@ -119,22 +174,10 @@ app.get('/api/exercise/users', (req, res) => {
  * req.body.date
  */
 app.post('/api/exercise/add', (req, res) => {
-  User.findOne({ _id: req.body.userId }).then((selectedUser) => {
-    if (selectedUser != null) {
-      return selectedUser;
-    // eslint-disable-next-line no-else-return
-    } else {
-      res.send(`The user with the id of ${req.body.userId} was not found`);
-    }
-  }).then((selectedUser) => {
-    let newDate = null;
-    try {
-      newDate = new Date(req.body.date);
-    } catch (error) {
-      newDate = new Date();
-    }
-    return [selectedUser, newDate];
-  }).then((returnArray) => {
+  Promise.all([
+    getUserById(req.body.userId),
+    validateDate(req.body.date),
+  ]).then((returnArray) => {
     const [selectedUser, newDate] = returnArray;
     const newLog = new ExerciseLog({
       _id: selectedUser._id,
@@ -142,25 +185,27 @@ app.post('/api/exercise/add', (req, res) => {
       description: req.body.description,
       duration: req.body.duration,
       date: newDate,
-    }, (err) => {
-      if (err) {
-        console.log(err);
-      }
     });
     newLog.save();
     res.json(newLog);
-  })
-    .catch((err) => {
-      res.send(err);
-    });
+  }).catch((err) => {
+    res.send(err.message);
+  });
 });
 
-// The post request occurs
-// the user is found and if the user does not exist, it returns that error, if the user
-// is found, then the user is passed on to the next function
-// At that point the date is processed, after the date is processed the date is passed on
-// with the user
-// The new log is created and returned
+/**
+ * Gets the exercise log for the given query.
+ * The different query options are below:
+ * req.query.userId
+ */
+app.get('/api/exercise/log', (req, res) => {
+  console.log(req.query);
+  ExerciseLog.find({
+    _id: req.query.userId,
+  }, (err, docs) => {
+    res.json(docs);
+  });
+});
 
 const listener = app.listen(process.env.PORT || 3000, () => {
   console.log(`Your app is listening on port ${listener.address().port}`);
