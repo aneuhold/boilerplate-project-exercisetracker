@@ -66,7 +66,7 @@ const exerciseLogSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
-  _id: {
+  userId: {
     type: String,
     required: true,
   },
@@ -158,6 +158,7 @@ function validateDate(dateString) {
  * @param {Object} query
  */
 function queryExerciseLogs(query) {
+  let userDoc = null;
   return new Promise((resolve, reject) => {
     if (!query.hasOwnProperty('userId')) {
       reject(Error('Please specify a user Id'));
@@ -165,7 +166,8 @@ function queryExerciseLogs(query) {
       // test if the user exists
       resolve(getUserById(query.userId));
     }
-  }).then(() => {
+  }).then((userDocument) => {
+    userDoc = userDocument;
     const promiseArray = [];
     // test each one of the from, to, and limit fields
     if (query.hasOwnProperty('from')) {
@@ -184,7 +186,60 @@ function queryExerciseLogs(query) {
       );
     }
     return Promise.all(promiseArray);
-  });
+  }).then((resultArray) => {
+    const selector = {
+      userId: query.userId,
+    };
+    const projection = {
+      _id: 0,
+      description: 1,
+      duration: 1,
+      date: 1,
+    };
+    if (
+      resultArray.length !== 0
+      && (resultArray[0].hasOwnProperty('from') || resultArray[0].hasOwnProperty('to'))
+    ) {
+      selector.date = {};
+    }
+    let hasLimit = false;
+    let limit = 1;
+    resultArray.forEach((obj) => {
+      if (obj.hasOwnProperty('from')) {
+        selector.date.$gte = obj.from;
+      } else if (obj.hasOwnProperty('to')) {
+        selector.date.$lte = obj.to;
+      } else if (obj.hasOwnProperty('limit')) {
+        hasLimit = true;
+        // eslint-disable-next-line prefer-destructuring
+        limit = obj.limit;
+      }
+    });
+    return new Promise((resolve, reject) => {
+      if (hasLimit) {
+        ExerciseLog.find(selector, projection, { limit }, (err, docs) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve(docs);
+          }
+        });
+      } else {
+        ExerciseLog.find(selector, projection, (err, docs) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve(docs);
+          }
+        });
+      }
+    });
+  }).then(docs => ({
+    username: userDoc.name,
+    userId: userDoc._id,
+    logCount: docs.length,
+    logs: docs,
+  }));
 }
 
 function validateNewDate(dateString) {
@@ -202,7 +257,6 @@ function validateNewDate(dateString) {
     resolve(newDate);
   });
 }
-
 
 /**
 * Creates a new user when posted to.
@@ -247,13 +301,17 @@ app.post('/api/exercise/add', (req, res) => {
   ]).then((returnArray) => {
     const [selectedUser, newDate] = returnArray;
     const newLog = new ExerciseLog({
-      _id: selectedUser._id,
+      userId: selectedUser._id,
       username: selectedUser.name,
       description: req.body.description,
       duration: req.body.duration,
       date: newDate,
     });
-    newLog.save();
+    newLog.save((err) => {
+      if (err) {
+        console.log(err);
+      }
+    });
     res.json(newLog);
   }).catch((err) => {
     res.send(err.message);
