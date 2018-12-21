@@ -2,7 +2,7 @@
 
 #### A microservice project, part of Free Code Camp's curriculum
 
-[Here is a demo of this app from 12/20/2018](https://decisive-cowl.glitch.me/)
+[Here is a demo of this app from 12/20/2018 completed by Anton Neuhold](https://decisive-cowl.glitch.me/)
 
 ### User Stories
 
