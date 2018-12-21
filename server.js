@@ -1,6 +1,7 @@
 /* eslint-disable no-underscore-dangle */
 /* eslint-disable prefer-promise-reject-errors */
 /* eslint-disable consistent-return */
+/* eslint-disable no-prototype-builtins */
 const express = require('express');
 const bodyParser = require('body-parser');
 const mongoose = require('mongoose');
@@ -121,7 +122,72 @@ function getUserById(id) {
   });
 }
 
+function validateNumber(numberString) {
+  return new Promise((resolve, reject) => {
+    const value = Number(numberString);
+    if (!Number.isNaN(value)) {
+      resolve(value);
+    } else {
+      reject(Error('Value is not a number'));
+    }
+  });
+}
+
+/**
+ * Validates a given date string and if it is, returns that date object.
+ * @param {String} dateString
+ */
 function validateDate(dateString) {
+  return new Promise((resolve, reject) => {
+    const newDate = new Date(dateString);
+    // eslint-disable-next-line eqeqeq
+    if (newDate == 'Invalid Date') {
+      reject(Error('Invalid date'));
+    }
+    resolve(newDate);
+  });
+}
+
+/**
+ * Tests the mongoose query object for the below properties and if they are valid
+ * then resolves the associated MongoDB documents.
+ * query.userId
+ * query.from
+ * query.to
+ * query.limit
+ * @param {Object} query
+ */
+function queryExerciseLogs(query) {
+  return new Promise((resolve, reject) => {
+    if (!query.hasOwnProperty('userId')) {
+      reject(Error('Please specify a user Id'));
+    } else {
+      // test if the user exists
+      resolve(getUserById(query.userId));
+    }
+  }).then(() => {
+    const promiseArray = [];
+    // test each one of the from, to, and limit fields
+    if (query.hasOwnProperty('from')) {
+      promiseArray.push(
+        validateDate(query.from).then(resultDate => ({ from: resultDate })),
+      );
+    }
+    if (query.hasOwnProperty('to')) {
+      promiseArray.push(
+        validateDate(query.to).then(resultDate => ({ to: resultDate })),
+      );
+    }
+    if (query.hasOwnProperty('limit')) {
+      promiseArray.push(
+        validateNumber(query.limit).then(resultValue => ({ limit: resultValue })),
+      );
+    }
+    return Promise.all(promiseArray);
+  });
+}
+
+function validateNewDate(dateString) {
   return new Promise((resolve, reject) => {
     let newDate;
     if (dateString === '') {
@@ -136,6 +202,7 @@ function validateDate(dateString) {
     resolve(newDate);
   });
 }
+
 
 /**
 * Creates a new user when posted to.
@@ -176,7 +243,7 @@ app.get('/api/exercise/users', (req, res) => {
 app.post('/api/exercise/add', (req, res) => {
   Promise.all([
     getUserById(req.body.userId),
-    validateDate(req.body.date),
+    validateNewDate(req.body.date),
   ]).then((returnArray) => {
     const [selectedUser, newDate] = returnArray;
     const newLog = new ExerciseLog({
@@ -199,11 +266,11 @@ app.post('/api/exercise/add', (req, res) => {
  * req.query.userId
  */
 app.get('/api/exercise/log', (req, res) => {
-  console.log(req.query);
-  ExerciseLog.find({
-    _id: req.query.userId,
-  }, (err, docs) => {
+  queryExerciseLogs(req.query).then((docs) => {
     res.json(docs);
+  }).catch((err) => {
+    res.send(err.message);
+    console.log(err);
   });
 });
 
