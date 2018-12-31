@@ -10,8 +10,13 @@ require('dotenv').load();
 
 const app = express();
 
-mongoose.connect(process.env.MLAB_URI || 'mongodb://localhost/exercise-track', {
+mongoose.connect(process.env.MLAB_URI, {
   useMongoClient: true,
+}, error => {
+  if (error) {
+    console.log(error);
+    console.log("Make sure to require dotenv as well");
+  }
 });
 
 app.use(bodyParser.urlencoded({ extended: false }));
@@ -172,17 +177,17 @@ function queryExerciseLogs(query) {
     // test each one of the from, to, and limit fields
     if (query.hasOwnProperty('from')) {
       promiseArray.push(
-        validateDate(query.from).then(resultDate => ({ from: resultDate })),
+        validateDate(query.from).then(resultDate => ({ from: resultDate }))
       );
     }
     if (query.hasOwnProperty('to')) {
       promiseArray.push(
-        validateDate(query.to).then(resultDate => ({ to: resultDate })),
+        validateDate(query.to).then(resultDate => ({ to: resultDate }))
       );
     }
     if (query.hasOwnProperty('limit')) {
       promiseArray.push(
-        validateNumber(query.limit).then(resultValue => ({ limit: resultValue })),
+        validateNumber(query.limit).then(resultValue => ({ limit: resultValue }))
       );
     }
     return Promise.all(promiseArray);
